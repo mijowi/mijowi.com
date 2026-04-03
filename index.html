@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>mijowi</title>
-    <!--
-    <link rel="apple-touch-icon" sizes="180x180" href="/img/favicon-256.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-128.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-128.png">
-    -->
+    <link rel="apple-touch-icon" href="/img/favicon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon.png">
     <style>
       /* Reset CSS */
       *, *::before, *::after {
@@ -31,16 +28,62 @@
         min-height: 100vh;
       }
     </style>
+
+		<script>
+			const makeStars = (howMany, twinkle) => {
+				const random = (min, max) => {
+					return min + Math.random() * (max + 1 - min);
+				}
+				for(let i = 0; i < howMany; i++) {
+					// Set up random elements
+					let xPos = random(0, 100)
+					let yPos = random(0, 100)
+					let alpha = random(0.5, 1)
+					let size = random(0, 1)
+					let color = `rgba(${random(150, 255)},${random(150, 255)},${random(150, 255)},${random(.3, 1)})`
+						
+					// Add them to the body
+					const star = document.createElement('div')
+					star.style.position = 'absolute'
+					star.style.left = xPos + '%'
+					star.style.top = yPos + '%'
+					star.style.opacity = alpha
+					star.style.width = size + 'px'
+					star.style.height = size + 'px'
+					star.style.backgroundColor = color
+					if(twinkle) {
+						star.animate([
+							{opacity: .1},
+							{opacity: alpha},
+							{opacity: .1}
+						], {
+							duration: random(1000, 4000),
+							iterations: Infinity
+						}
+					)}
+					document.body.appendChild(star)
+				}
+			}
+
+			document.addEventListener("DOMContentLoaded", (event) => {
+				const body = document.querySelector('body')
+				const canvasSize = body.offsetWidth * body.offsetHeight
+				const starsFraction = canvasSize / 1000
+
+				makeStars(starsFraction, true)
+			})
+		</script>
+	  
   </head>
   <body>
       <main>
 	<svg width="190" height="65" viewBox="0 0 190 65" fill="none" xmlns="http://www.w3.org/2000/svg">
-	<path d="M4.5 61V5H18.5V61H32.5V5H46.5V61" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path d="M101.5 5V61H108.5H115.5L115.5 5H108.5H101.5Z" stroke="white" stroke-width="8" stroke-linecap="round"/>
-	<path d="M60.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path d="M129.5 5V61H143.5V5H157.5V61H171.5V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path d="M185.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path d="M73.5 53V61H88.1206L87.5 5" stroke="white" stroke-width="8" stroke-linecap="square"/>
+	<path id=mijowi-1 d="M4.5 61V5H18.5V61H32.5V5H46.5V61" stroke="white" stroke-width="8" stroke-linecap="square"/>
+	<path id=mijowi-2 d="M101.5 5V61H108.5H115.5L115.5 5H108.5H101.5Z" stroke="white" stroke-width="8" stroke-linecap="round"/>
+	<path id=mijowi-3 d="M60.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
+	<path id=mijowi-4 d="M129.5 5V61H143.5V5H157.5V61H171.5V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
+	<path id=mijowi-5 d="M185.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
+	<path id=mijowi-6 d="M73.5 53V61H88.1206L87.5 5" stroke="white" stroke-width="8" stroke-linecap="square"/>
 	</svg>	
       </main>
   </body>
