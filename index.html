@@ -7,84 +7,525 @@
     <link rel="apple-touch-icon" href="/img/favicon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon.png">
     <style>
-      /* Reset CSS */
-      *, *::before, *::after {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-      
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       html, body {
-        height: 100%;
-        width: 100%;
-	background: radial-gradient(ellipse 90% 80% at bottom, #233066, #02031a);
-	overflow: hidden;
+        height: 100%; width: 100%;
+        background: radial-gradient(ellipse 90% 80% at bottom, #233066, black);
+        overflow: hidden;
       }
-      
-      /* Grid layout to center SVG */
-      body {
-        display: grid;
-        place-items: center;
-        min-height: 100vh;
+
+      body { display: grid; place-items: center; min-height: 100vh; }
+
+      #gl-canvas {
+        position: fixed; top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
       }
+
+      main { position: relative; z-index: 10; }
     </style>
-
-		<script>
-			const makeStars = (howMany, twinkle) => {
-				const random = (min, max) => {
-					return min + Math.random() * (max + 1 - min);
-				}
-				for(let i = 0; i < howMany; i++) {
-					// Set up random elements
-					let xPos = random(0, 100)
-					let yPos = random(0, 100)
-					let alpha = random(0.5, 1)
-					let size = random(0, 1)
-					let color = `rgba(${random(150, 255)},${random(150, 255)},${random(150, 255)},${random(.3, 1)})`
-						
-					// Add them to the body
-					const star = document.createElement('div')
-					star.style.position = 'absolute'
-					star.style.left = xPos + '%'
-					star.style.top = yPos + '%'
-					star.style.opacity = alpha
-					star.style.width = size + 'px'
-					star.style.height = size + 'px'
-					star.style.backgroundColor = color
-					if(twinkle) {
-						star.animate([
-							{opacity: .1},
-							{opacity: alpha},
-							{opacity: .1}
-						], {
-							duration: random(1000, 4000),
-							iterations: Infinity
-						}
-					)}
-					document.body.appendChild(star)
-				}
-			}
-
-			document.addEventListener("DOMContentLoaded", (event) => {
-				const body = document.querySelector('body')
-				const canvasSize = body.offsetWidth * body.offsetHeight
-				const starsFraction = canvasSize / 1000
-
-				makeStars(starsFraction, true)
-			})
-		</script>
-	  
   </head>
   <body>
-      <main>
-	<svg width="190" height="65" viewBox="0 0 190 65" fill="none" xmlns="http://www.w3.org/2000/svg">
-	<path id=mijowi-1 d="M4.5 61V5H18.5V61H32.5V5H46.5V61" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path id=mijowi-2 d="M101.5 5V61H108.5H115.5L115.5 5H108.5H101.5Z" stroke="white" stroke-width="8" stroke-linecap="round"/>
-	<path id=mijowi-3 d="M60.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path id=mijowi-4 d="M129.5 5V61H143.5V5H157.5V61H171.5V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path id=mijowi-5 d="M185.5 61V5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	<path id=mijowi-6 d="M73.5 53V61H88.1206L87.5 5" stroke="white" stroke-width="8" stroke-linecap="square"/>
-	</svg>	
-      </main>
+    <canvas id="gl-canvas"></canvas>
+    <main>
+      <svg width="190" height="65" viewBox="0 0 190 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path id=mijowi-1 d="M4.5 61V5H18.5V61H32.5V5H46.5V61"           stroke="white" stroke-width="8" stroke-linecap="square"/>
+        <path id=mijowi-2 d="M101.5 5V61H108.5H115.5L115.5 5H108.5H101.5Z" stroke="white" stroke-width="8" stroke-linecap="round"/>
+        <path id=mijowi-3 d="M60.5 61V5"                                   stroke="white" stroke-width="8" stroke-linecap="square"/>
+        <path id=mijowi-4 d="M129.5 5V61H143.5V5H157.5V61H171.5V5"         stroke="white" stroke-width="8" stroke-linecap="square"/>
+        <path id=mijowi-5 d="M185.5 61V5"                                  stroke="white" stroke-width="8" stroke-linecap="square"/>
+        <path id=mijowi-6 d="M73.5 53V61H88.1206L87.5 5"                   stroke="white" stroke-width="8" stroke-linecap="square"/>
+      </svg>
+    </main>
+
+    <script>
+    'use strict';
+
+    // ─── Utilities ──────────────────────────────────────────────────────────────
+    const rf = (a, b) => a + Math.random() * (b - a);
+
+    const gauss = (mean, std) => {
+      const u = Math.max(1e-10, Math.random());
+      return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+    };
+
+    // Map temperature t∈[0,1] (cool→hot) to stellar RGB, normalised 0–1.
+    const tempToRGB = (t) => {
+      const stops = [
+        [0.00, 1.000, 0.608, 0.275],  // M: deep orange-red
+        [0.20, 1.000, 0.784, 0.510],  // K: orange
+        [0.42, 1.000, 0.973, 0.882],  // G/F: warm white
+        [0.62, 1.000, 1.000, 1.000],  // A: pure white
+        [0.80, 0.765, 0.843, 1.000],  // B: blue-white
+        [1.00, 0.569, 0.667, 1.000],  // O: deep blue-white
+      ];
+      let i = 0;
+      while (i < stops.length - 2 && t > stops[i + 1][0]) i++;
+      const [t0, r0, g0, b0] = stops[i], [t1, r1, g1, b1] = stops[i + 1];
+      const f = (t - t0) / (t1 - t0);
+      return [r0 + (r1 - r0) * f, g0 + (g1 - g0) * f, b0 + (b1 - b0) * f];
+    };
+
+    // ─── Shader Sources ─────────────────────────────────────────────────────────
+
+    // ── Milky Way: fullscreen quad, fragment shader does all the geometry ──────
+    const MW_VERT = `
+      attribute vec2 a_pos;
+      void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+    `;
+
+    const MW_FRAG = `
+      precision mediump float;
+      uniform vec2 u_res;
+
+      void main() {
+        // gl_FragCoord has (0,0) at bottom-left; flip to match HTML top-left origin
+        float px = gl_FragCoord.x;
+        float py = u_res.y - gl_FragCoord.y;
+        float w  = u_res.x, h = u_res.y;
+
+        // Band centre-line: HTML (0, h*0.12) → (w, h*0.74)
+        vec2 A  = vec2(0.0, h * 0.12);
+        vec2 Dn = normalize(vec2(w, h * 0.62));   // unit direction along band
+        vec2 PA = vec2(px, py) - A;
+
+        // Signed perpendicular distance from the centre-line (pixels)
+        float perp = PA.x * Dn.y - PA.y * Dn.x;
+
+        // Two overlapping Gaussian layers matching the original canvas gradients
+        float outerSigma = h * 0.28;
+        float coreSigma  = h * 0.09;
+        float outer = 0.028 * exp(-0.5 * (perp / outerSigma) * (perp / outerSigma));
+        float core  = 0.045 * exp(-0.5 * (perp / coreSigma)  * (perp / coreSigma));
+
+        float a = outer + core;
+        if (a < 0.001) discard;
+
+        vec3 outerCol = vec3(0.549, 0.608, 0.824);  // rgba(140,155,210)
+        vec3 coreCol  = vec3(0.667, 0.714, 0.902);  // rgba(170,182,230)
+        vec3 col      = (outerCol * outer + coreCol * core) / max(a, 0.0001);
+
+        gl_FragColor = vec4(col * a, a);  // premultiplied alpha
+      }
+    `;
+
+    // ── Stars: POINTS with scintillation + drift entirely on GPU ─────────────
+    const STAR_VERT = `
+      attribute vec2  a_pos;     // initial pixel position
+      attribute float a_size;    // radius in pixels
+      attribute vec3  a_color;   // RGB 0-1
+      attribute float a_alpha;   // peak opacity
+      attribute float a_minOp;   // trough opacity
+      attribute float a_period;  // base scintillation period (ms)
+      attribute vec3  a_phases;  // per-wave phase offsets
+      attribute vec2  a_vel;     // drift velocity (px/ms); zero for static stars
+      attribute float a_halo;    // 1.0 for bright stars that get a wide glow sprite
+
+      uniform float u_time;      // performance.now() in ms
+      uniform vec2  u_res;       // canvas size in px
+
+      varying vec3  v_color;
+      varying float v_opacity;
+      varying float v_halo;
+
+      const float TAU = 6.2831853;
+
+      void main() {
+        // Continuous toroidal drift — no CPU updates needed
+        vec2 pos = mod(a_pos + a_vel * u_time, u_res);
+
+        // Three-wave scintillation with incommensurable periods (golden-ratio spacing)
+        // Identical to the original JS math, now running on thousands of GPU cores simultaneously
+        float s0 = 0.55 * (sin(u_time / a_period           * TAU + a_phases.x) + 1.0) * 0.5;
+        float s1 = 0.30 * (sin(u_time / (a_period * 1.618) * TAU + a_phases.y) + 1.0) * 0.5;
+        float s2 = 0.15 * (sin(u_time / (a_period * 2.618) * TAU + a_phases.z) + 1.0) * 0.5;
+        float opacity = a_minOp + (s0 + s1 + s2) * (a_alpha - a_minOp);
+
+        vec2 clip = (pos / u_res) * 2.0 - 1.0;
+        clip.y = -clip.y;
+
+        gl_Position  = vec4(clip, 0.0, 1.0);
+        // Halo stars get a sprite large enough for the wide glow ring
+        gl_PointSize = a_halo > 0.5 ? max(4.0, a_size * 4.0 + 2.0)
+                                     : max(1.0, a_size * 4.0);
+        v_color   = a_color;
+        v_opacity = opacity;
+        v_halo    = a_halo;
+      }
+    `;
+
+    const STAR_FRAG = `
+      precision mediump float;
+      varying vec3  v_color;
+      varying float v_opacity;
+      varying float v_halo;
+
+      void main() {
+        // d: 0 = sprite centre, 1 = sprite edge
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+
+        // Tight Gaussian core present on every star
+        float core = exp(-d * d * 5.0);
+
+        // Wide diffuse halo only for bright stars (sprite is 4.5× larger
+        // so the same falloff coefficient produces a much wider physical glow)
+        float halo = v_halo * exp(-d * d * 1.8) * 0.16;
+
+        float a = (core + halo) * v_opacity;
+        if (a < 0.004) discard;
+
+        gl_FragColor = vec4(v_color * a, a);  // premultiplied alpha
+      }
+    `;
+
+    // ── Shooting stars: oriented quads with an along-trail gradient ───────────
+    const SS_VERT = `
+      attribute vec2  a_pos;   // vertex world position (pixels)
+      attribute float a_t;     // 0 = head, 1 = tail
+      attribute float a_edge;  // −0.5…+0.5 perpendicular to travel
+      attribute float a_life;  // 1 → 0 as it fades
+
+      uniform vec2 u_res;
+
+      varying float v_t;
+      varying float v_edge;
+      varying float v_life;
+
+      void main() {
+        vec2 clip = (a_pos / u_res) * 2.0 - 1.0;
+        clip.y = -clip.y;
+        gl_Position = vec4(clip, 0.0, 1.0);
+        v_t    = a_t;
+        v_edge = a_edge;
+        v_life = a_life;
+      }
+    `;
+
+    const SS_FRAG = `
+      precision mediump float;
+      varying float v_t;
+      varying float v_edge;
+      varying float v_life;
+
+      void main() {
+        // 3-stop gradient matching the original canvas stops:
+        //   t=0.0  → life*0.9  (bright white head)
+        //   t=0.3  → life*0.4  (ice-blue mid)
+        //   t=1.0  → 0.0       (transparent tail)
+        float a;
+        if (v_t < 0.3) {
+          a = mix(v_life * 0.9, v_life * 0.4, v_t / 0.3);
+        } else {
+          a = v_life * 0.4 * (1.0 - (v_t - 0.3) / 0.7);
+        }
+
+        // Soft Gaussian falloff perpendicular to the trail
+        a *= exp(-v_edge * v_edge * 28.0);
+
+        if (a < 0.004) discard;
+
+        vec3 headCol = vec3(1.000, 1.000, 1.000);  // rgba(255,255,255)
+        vec3 midCol  = vec3(0.863, 0.902, 1.000);  // rgba(220,230,255)
+        vec3 tailCol = vec3(0.706, 0.784, 1.000);  // rgba(180,200,255)
+
+        vec3 col;
+        if (v_t < 0.3) {
+          col = mix(headCol, midCol, v_t / 0.3);
+        } else {
+          col = mix(midCol, tailCol, (v_t - 0.3) / 0.7);
+        }
+
+        gl_FragColor = vec4(col * a, a);  // premultiplied alpha
+      }
+    `;
+
+    // ─── WebGL Helpers ──────────────────────────────────────────────────────────
+    const compileShader = (gl, type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src.trim());
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS))
+        throw new Error(`Shader: ${gl.getShaderInfoLog(sh)}`);
+      return sh;
+    };
+
+    const createProgram = (gl, vs, fs) => {
+      const prog = gl.createProgram();
+      gl.attachShader(prog, compileShader(gl, gl.VERTEX_SHADER,   vs));
+      gl.attachShader(prog, compileShader(gl, gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        throw new Error(`Program: ${gl.getProgramInfoLog(prog)}`);
+      return prog;
+    };
+
+    // Bind a set of interleaved float attributes from the currently-bound ARRAY_BUFFER.
+    // layout: [[name, componentCount, offsetInFloats], ...]
+    const bindLayout = (gl, prog, layout, strideFloats) => {
+      for (const [name, size, offset] of layout) {
+        const loc = gl.getAttribLocation(prog, name);
+        if (loc < 0) continue;
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, strideFloats * 4, offset * 4);
+      }
+    };
+
+    // ─── Star Data ──────────────────────────────────────────────────────────────
+    // Interleaved layout (15 floats / star):
+    //  0: x   1: y   2: size   3: r   4: g   5: b
+    //  6: alpha   7: minOp   8: period
+    //  9: phaseX  10: phaseY  11: phaseZ
+    // 12: vx  13: vy  14: isHalo
+    const STAR_STRIDE = 15;
+
+    const STAR_LAYOUT = [
+      ['a_pos',    2,  0],
+      ['a_size',   1,  2],
+      ['a_color',  3,  3],
+      ['a_alpha',  1,  6],
+      ['a_minOp',  1,  7],
+      ['a_period', 1,  8],
+      ['a_phases', 3,  9],
+      ['a_vel',    2, 12],
+      ['a_halo',   1, 14],
+    ];
+
+    const buildStars = (w, h) => {
+      // ~4× the original (w*h)/500 density — still trivial for the GPU
+      const count  = Math.floor((w * h) / 120);
+      const data   = new Float32Array(count * STAR_STRIDE);
+      const bandY1 = h * 0.12, bandY2 = h * 0.74;
+
+      for (let i = 0; i < count; i++) {
+        const size     = Math.min(2, 0.15 + 1.4 * Math.pow(Math.random(), 3));
+        const sizeNorm = (size - 0.15) / 1.35;
+        const temp     = Math.min(1, Math.pow(Math.random(), 2.8) + sizeNorm * 0.28);
+        const [r, g, b] = tempToRGB(temp);
+        const alpha    = rf(0.28 + sizeNorm * 0.38, 0.62 + sizeNorm * 0.38);
+        const period   = rf(400, 1400);
+        const twinkle  = rf(0, 0.35) * Math.sqrt(period / 1400);
+        const minOp    = Math.max(0, alpha - twinkle);
+
+        let x, y;
+        if (Math.random() < 0.35) {   // 35% concentrated in the Milky Way band
+          const t = Math.random();
+          x = t * w;
+          y = gauss(bandY1 + t * (bandY2 - bandY1), h * 0.085);
+          y = ((y % h) + h) % h;
+        } else {
+          x = rf(0, w); y = rf(0, h);
+        }
+
+        const drifts = Math.random() < 0.4;
+        // Store velocity in px/ms so the vertex shader can compute pos + vel*time
+        const vx = drifts ? rf(-0.02, 0.02) / 16.667 : 0;
+        const vy = drifts ? rf(-0.012, 0.012) / 16.667 : 0;
+
+        const o = i * STAR_STRIDE;
+        data[o]    = x;      data[o+1]  = y;      data[o+2]  = size;
+        data[o+3]  = r;      data[o+4]  = g;      data[o+5]  = b;
+        data[o+6]  = alpha;  data[o+7]  = minOp;
+        data[o+8]  = period;
+        data[o+9]  = rf(0, Math.PI * 2);
+        data[o+10] = rf(0, Math.PI * 2);
+        data[o+11] = rf(0, Math.PI * 2);
+        data[o+12] = vx;     data[o+13] = vy;
+        data[o+14] = size > 1.5 ? 1 : 0;
+      }
+
+      return { data, count };
+    };
+
+    // ─── Shooting Stars ─────────────────────────────────────────────────────────
+    // Interleaved layout (5 floats / vertex):  x  y  t  edge  life
+    const SS_STRIDE = 5;
+    const SS_LAYOUT = [
+      ['a_pos',  2, 0],
+      ['a_t',    1, 2],
+      ['a_edge', 1, 3],
+      ['a_life', 1, 4],
+    ];
+
+    const spawnSS = (w, h) => {
+      const deg = Math.random() < 0.5 ? rf(15, 79) : rf(101, 165);
+      const ang = deg * Math.PI / 180;
+      const spd = rf(9, 16);
+      const vx  = Math.cos(ang) * spd, vy = Math.sin(ang) * spd;
+      return {
+        x:  Math.abs(vx) >= Math.abs(vy) ? (vx > 0 ? 0 : w) : rf(0, w),
+        y:  Math.abs(vx) >= Math.abs(vy) ? rf(0, h * 0.75)   : 0,
+        vx, vy, length: rf(90, 180), life: 1, decay: rf(0.008, 0.02),
+      };
+    };
+
+    // Rebuild the shooting-star vertex buffer; returns vertex count.
+    const uploadSSBuffer = (gl, buf, list) => {
+      const data = new Float32Array(list.length * 6 * SS_STRIDE);
+      let vi = 0;
+
+      for (const { x, y, vx, vy, length, life } of list) {
+        const norm  = Math.hypot(vx, vy);
+        const tailX = x - (vx / norm) * length;
+        const tailY = y - (vy / norm) * length;
+        // Perpendicular unit vector (for quad half-width)
+        const px = -vy / norm, py = vx / norm;
+        const hw = 2.0;  // half-width in pixels → lineWidth = 4 px
+
+        // 4 corners
+        const c = [
+          [x     + px*hw, y     + py*hw, 0, -0.5],
+          [x     - px*hw, y     - py*hw, 0,  0.5],
+          [tailX + px*hw, tailY + py*hw, 1, -0.5],
+          [tailX - px*hw, tailY - py*hw, 1,  0.5],
+        ];
+
+        for (const [i0,i1,i2] of [[0,1,2],[1,3,2]]) {
+          for (const ci of [i0,i1,i2]) {
+            const b = (vi++) * SS_STRIDE;
+            data[b]   = c[ci][0];   // x
+            data[b+1] = c[ci][1];   // y
+            data[b+2] = c[ci][2];   // t
+            data[b+3] = c[ci][3];   // edge
+            data[b+4] = life;
+          }
+        }
+      }
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, vi * SS_STRIDE), gl.DYNAMIC_DRAW);
+      return vi;
+    };
+
+    // ─── Bootstrap ──────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('gl-canvas');
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const gl = canvas.getContext('webgl', {
+        alpha: true,
+        premultipliedAlpha: true,  // default; tells the browser our output is premultiplied
+        antialias: false,
+      });
+      if (!gl) { console.error('WebGL unavailable'); return; }
+
+      // ── Compile all three programs ──
+      const mwProg   = createProgram(gl, MW_VERT,   MW_FRAG);
+      const starProg = createProgram(gl, STAR_VERT, STAR_FRAG);
+      const ssProg   = createProgram(gl, SS_VERT,   SS_FRAG);
+
+      // ── Buffers ──
+      // Milky Way: static fullscreen quad (NDC, 2 triangles)
+      const mwBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, mwBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1,-1,  1,-1,  -1,1,
+        -1, 1,  1,-1,   1,1,
+      ]), gl.STATIC_DRAW);
+
+      // Stars: rebuilt on resize, static between resizes
+      const starBuf = gl.createBuffer();
+      let starCount = 0;
+
+      const uploadStars = () => {
+        const { data, count } = buildStars(canvas.width, canvas.height);
+        gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        starCount = count;
+      };
+      uploadStars();
+
+      // Shooting stars: dynamic, rebuilt every frame
+      const ssBuf  = gl.createBuffer();
+      const ssList = [];
+      const ssState = { last: performance.now(), next: rf(2000, 6000) };
+
+      // ── Uniform locations ──
+      gl.useProgram(mwProg);
+      const mwRes = gl.getUniformLocation(mwProg, 'u_res');
+
+      gl.useProgram(starProg);
+      const starTime = gl.getUniformLocation(starProg, 'u_time');
+      const starRes  = gl.getUniformLocation(starProg, 'u_res');
+
+      gl.useProgram(ssProg);
+      const ssRes = gl.getUniformLocation(ssProg, 'u_res');
+
+      // Milky Way attribute location (simple program, cache it once)
+      const mwPosLoc = gl.getAttribLocation(mwProg, 'a_pos');
+
+      // ── Global GL state ──
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);  // premultiplied alpha blend
+
+      const applyResolution = () => {
+        const { width: w, height: h } = canvas;
+        gl.viewport(0, 0, w, h);
+        gl.useProgram(mwProg);   gl.uniform2f(mwRes,   w, h);
+        gl.useProgram(starProg); gl.uniform2f(starRes,  w, h);
+        gl.useProgram(ssProg);   gl.uniform2f(ssRes,    w, h);
+      };
+      applyResolution();
+
+      window.addEventListener('resize', () => {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        applyResolution();
+        uploadStars();   // regenerate star positions for new viewport
+      });
+
+      // ── Render loop ──
+      const frame = (now) => {
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // ── Pass 1: Milky Way ──
+        gl.useProgram(mwProg);
+        gl.bindBuffer(gl.ARRAY_BUFFER, mwBuf);
+        gl.enableVertexAttribArray(mwPosLoc);
+        gl.vertexAttribPointer(mwPosLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        // ── Pass 2: Stars ──
+        // The vertex shader computes drift and scintillation; no CPU math, no buffer update.
+        gl.useProgram(starProg);
+        gl.uniform1f(starTime, now);   // raw ms from rAF; matches period units
+        gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
+        bindLayout(gl, starProg, STAR_LAYOUT, STAR_STRIDE);
+        gl.drawArrays(gl.POINTS, 0, starCount);
+
+        // ── Pass 3: Shooting Stars ──
+        // Update positions on CPU (rare: 0–1 active at a time)
+        if (now - ssState.last > ssState.next) {
+          ssList.push(spawnSS(canvas.width, canvas.height));
+          ssState.last = now;
+          ssState.next = rf(20000, 40000);
+        }
+
+        for (let i = ssList.length - 1; i >= 0; i--) {
+          const ss = ssList[i];
+          ss.x += ss.vx;  ss.y += ss.vy;  ss.life -= ss.decay;
+          if (ss.life <= 0
+              || ss.x > canvas.width  + ss.length
+              || ss.y > canvas.height + ss.length
+              || ss.x < -ss.length) {
+            ssList.splice(i, 1);
+          }
+        }
+
+        if (ssList.length > 0) {
+          gl.useProgram(ssProg);
+          const vCount = uploadSSBuffer(gl, ssBuf, ssList);
+          bindLayout(gl, ssProg, SS_LAYOUT, SS_STRIDE);
+          gl.drawArrays(gl.TRIANGLES, 0, vCount);
+        }
+
+        requestAnimationFrame(frame);
+      };
+
+      requestAnimationFrame(frame);
+    });
+    </script>
   </body>
 </html>
